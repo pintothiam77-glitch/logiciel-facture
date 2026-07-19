@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Encre — Atelier de facturation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<style>
+:root{
+  --ink:#16302B;
+  --ink-2:#20443C;
+  --ink-soft:#3A5A51;
+  --paper:#FBF8EF;
+  --paper-edge:#EFE8D4;
+  --rule:#DCD2B4;
+  --brass:#A9793C;
+  --brass-dark:#7C5726;
+  --sage:#7C8C7E;
+  --paid:#3E7A4F;
+  --late:#A23B2E;
+  --cream-text:#F2EEE0;
+  --muted:#B9C4B9;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{
+  background:var(--ink);
+  background-image:radial-gradient(circle at 15% 10%, rgba(255,255,255,0.04), transparent 45%),
+                    radial-gradient(circle at 85% 90%, rgba(169,121,60,0.08), transparent 50%);
+  color:var(--cream-text);
+  font-family:'IBM Plex Sans',sans-serif;
+  min-height:100vh;
+}
+::selection{background:var(--brass);color:var(--ink);}
+input,select,textarea{
+  font-family:'IBM Plex Sans',sans-serif;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.14);
+  color:var(--cream-text);
+  border-radius:4px;
+  padding:8px 10px;
+  font-size:13.5px;
+  width:100%;
+  outline:none;
+  transition:border-color .15s, background .15s;
+}
+input::placeholder,textarea::placeholder{color:rgba(242,238,224,0.35);}
+input:focus,select:focus,textarea:focus{border-color:var(--brass);background:rgba(255,255,255,0.08);}
+input[type=number]{font-family:'IBM Plex Mono',monospace;}
+select{cursor:pointer;}
+textarea{resize:vertical;min-height:56px;}
+button{font-family:'IBM Plex Sans',sans-serif;cursor:pointer;border:none;}
+label{
+  display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:4px;font-weight:500;
+}
+.field{margin-bottom:12px;}
+.row{display:grid;gap:10px;}
+.row-2{grid-template-columns:1fr 1fr;}
+.row-3{grid-template-columns:2fr 1fr 1fr;}
+
+/* ---------- Topbar ---------- */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 28px;border-bottom:1px solid rgba(255,255,255,0.08);
+  position:sticky;top:0;background:var(--ink);z-index:50;
+}
+.brand{display:flex;align-items:baseline;gap:12px;}
+.brand-mark{
+  font-family:'Fraunces',serif;font-size:26px;font-weight:600;letter-spacing:.01em;color:var(--cream-text);
+}
+.brand-mark span{color:var(--brass);font-style:italic;}
+.brand-tag{font-size:11.5px;color:var(--muted);letter-spacing:.03em;}
+.topbar-actions{display:flex;gap:10px;}
+.btn{
+  padding:10px 18px;border-radius:4px;font-size:13px;font-weight:500;letter-spacing:.02em;
+  display:inline-flex;align-items:center;gap:8px;transition:transform .12s, opacity .12s;
+}
+.btn:active{transform:scale(.97);}
+.btn-brass{background:var(--brass);color:var(--ink);}
+.btn-brass:hover{background:#B98946;}
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.2);color:var(--cream-text);}
+.btn-ghost:hover{border-color:var(--brass);color:var(--brass);}
+.btn-small{padding:6px 10px;font-size:11.5px;background:rgba(255,255,255,0.08);color:var(--cream-text);border-radius:3px;}
+.btn-small:hover{background:rgba(255,255,255,0.15);}
+.btn-remove{background:rgba(162,59,46,0.18);color:#E9A79A;padding:8px;border-radius:3px;}
+.btn-remove:hover{background:rgba(162,59,46,0.32);}
+
+/* ---------- Workspace ---------- */
+.workspace{display:grid;grid-template-columns:400px 1fr;gap:0;align-items:start;}
+@media(max-width:980px){.workspace{grid-template-columns:1fr;}}
+
+.form-panel{
+  padding:24px 24px 60px;border-right:1px solid rgba(255,255,255,0.08);
+  height:calc(100vh - 73px);overflow-y:auto;
+}
+.form-panel::-webkit-scrollbar{width:6px;}
+.form-panel::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px;}
+
+.step{margin-bottom:30px;}
+.step-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.step-num{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--brass);
+  border:1px solid var(--brass);border-radius:50%;width:22px;height:22px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.step-title{font-family:'Fraunces',serif;font-size:17px;font-weight:500;color:var(--cream-text);}
+.step-body{padding-left:32px;border-left:1px solid rgba(255,255,255,0.08);margin-left:11px;}
+
+.logo-upload{
+  display:flex;align-items:center;gap:12px;margin-bottom:14px;
+}
+.logo-preview{
+  width:56px;height:56px;border-radius:6px;background:rgba(255,255,255,0.06);
+  border:1px dashed rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;
+  overflow:hidden;flex-shrink:0;
+}
+.logo-preview img{width:100%;height:100%;object-fit:contain;}
+.file-btn{position:relative;overflow:hidden;}
+.file-btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;}
+
+.item-row{
+  display:grid;grid-template-columns:1fr 44px 78px 56px 30px;gap:6px;margin-bottom:8px;align-items:center;
+}
+.item-row input{padding:7px 8px;font-size:12.5px;}
+.items-head{
+  display:grid;grid-template-columns:1fr 44px 78px 56px 30px;gap:6px;
+  font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;
+}
+
+.sig-tabs{display:flex;gap:6px;margin-bottom:10px;}
+.sig-tab{padding:6px 12px;font-size:12px;border-radius:3px;background:rgba(255,255,255,0.05);color:var(--muted);}
+.sig-tab.active{background:var(--brass);color:var(--ink);font-weight:500;}
+#sigCanvas{
+  background:#fff;border-radius:4px;width:100%;height:130px;touch-action:none;cursor:crosshair;
+}
+.sig-upload-zone{
+  background:rgba(255,255,255,0.05);border:1px dashed rgba(255,255,255,0.25);border-radius:4px;
+  height:130px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
+}
+.sig-upload-zone img{max-width:90%;max-height:90%;object-fit:contain;}
+.sig-upload-zone span{font-size:12px;color:var(--muted);}
+.sig-actions{display:flex;gap:8px;margin-top:8px;}
+
+.theme-row{display:flex;gap:10px;}
+.theme-swatch{
+  flex:1;padding:10px;border-radius:5px;border:1.5px solid rgba(255,255,255,0.14);cursor:pointer;text-align:center;
+  font-size:12px;color:var(--muted);
+}
+.theme-swatch.active{border-color:var(--brass);color:var(--brass);background:rgba(169,121,60,0.08);}
+
+/* ---------- Preview panel ---------- */
+.preview-panel{
+  padding:40px;display:flex;flex-direction:column;align-items:center;gap:18px;
+  height:calc(100vh - 73px);overflow-y:auto;
+}
+.preview-hint{font-size:12px;color:var(--muted);letter-spacing:.02em;}
+
+.paper{
+  width:210mm;min-height:297mm;background:var(--paper);
+  box-shadow:0 30px 70px rgba(0,0,0,0.5), 0 6px 18px rgba(0,0,0,0.35);
+  padding:16mm 14mm 14mm;position:relative;color:var(--ink);
+  font-family:'Newsreader',serif;
+}
+.paper::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:
+    repeating-linear-gradient(rgba(0,0,0,0.012) 0px, rgba(0,0,0,0.012) 1px, transparent 1px, transparent 2px);
+}
+.paper-inner{position:relative;z-index:1;}
+
+.doc-head{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:2px solid var(--ink);margin-bottom:22px;}
+.issuer{display:flex;gap:14px;align-items:flex-start;}
+.issuer-logo{
+  width:58px;height:58px;border-radius:8px;background:var(--ink);color:var(--paper);
+  display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:20px;font-weight:600;
+  flex-shrink:0;overflow:hidden;
+}
+.issuer-logo img{width:100%;height:100%;object-fit:contain;}
+.issuer-name{font-family:'Fraunces',serif;font-size:19px;font-weight:600;line-height:1.2;}
+.issuer-line{font-size:11.5px;color:var(--ink-soft);line-height:1.55;font-family:'IBM Plex Sans',sans-serif;}
+.doc-meta{text-align:right;}
+.doc-title{font-family:'Fraunces',serif;font-style:italic;font-size:26px;color:var(--brass-dark);letter-spacing:.02em;}
+.doc-num{font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:4px;color:var(--ink);}
+.doc-dates{font-size:11px;color:var(--ink-soft);margin-top:8px;font-family:'IBM Plex Sans',sans-serif;line-height:1.6;}
+.doc-dates b{color:var(--ink);font-family:'IBM Plex Mono',monospace;font-weight:500;}
+
+.bill-to{display:flex;justify-content:space-between;margin-bottom:24px;gap:20px;}
+.bill-block{flex:1;}
+.bill-eyebrow{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:6px;font-family:'IBM Plex Sans',sans-serif;font-weight:600;}
+.bill-name{font-family:'Fraunces',serif;font-size:15px;font-weight:500;margin-bottom:3px;}
+.bill-line{font-size:11.5px;color:var(--ink-soft);line-height:1.6;font-family:'IBM Plex Sans',sans-serif;}
+
+table.items{width:100%;border-collapse:collapse;margin-bottom:6px;}
+table.items thead th{
+  text-align:left;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--paper);
+  background:var(--ink);padding:9px 10px;font-family:'IBM Plex Sans',sans-serif;font-weight:600;
+}
+table.items thead th:last-child,table.items tbody td:last-child{text-align:right;}
+table.items tbody td{padding:9px 10px;font-size:12.5px;border-bottom:1px solid var(--rule);vertical-align:top;}
+table.items tbody tr:nth-child(even){background:rgba(169,121,60,0.045);}
+.cell-num{font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.cell-desc-title{font-weight:500;}
+
+.totals-wrap{display:flex;justify-content:flex-end;margin-top:14px;position:relative;}
+.totals{width:60%;min-width:230px;}
+.total-line{display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px;font-family:'IBM Plex Sans',sans-serif;color:var(--ink-soft);}
+.total-line b{font-family:'IBM Plex Mono',monospace;font-weight:500;color:var(--ink);}
+.total-line.grand{
+  border-top:2px solid var(--ink);margin-top:6px;padding-top:10px;
+  font-family:'Fraunces',serif;font-size:17px;color:var(--ink);font-weight:600;
+}
+.total-line.grand b{font-family:'IBM Plex Mono',monospace;font-size:17px;}
+
+.notes-block{margin-top:26px;font-size:11px;color:var(--ink-soft);line-height:1.7;font-family:'IBM Plex Sans',sans-serif;}
+.notes-block .eyebrow{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:5px;font-weight:600;}
+.notes-block + .notes-block{margin-top:14px;}
+
+.sign-zone{
+  display:flex;justify-content:space-between;align-items:flex-end;margin-top:44px;
+  padding-top:16px;border-top:1px solid var(--rule);position:relative;
+}
+.sign-locdate{font-size:11px;color:var(--ink-soft);font-family:'IBM Plex Sans',sans-serif;}
+.sign-block{text-align:center;width:220px;position:relative;}
+.sign-img{max-height:64px;max-width:200px;margin:0 auto;display:block;}
+.sign-script{font-family:'Fraunces',serif;font-style:italic;font-size:30px;color:var(--ink);}
+.sign-rule{border-top:1px solid var(--ink);margin-top:4px;padding-top:6px;font-size:11px;font-family:'IBM Plex Sans',sans-serif;}
+.sign-name{font-weight:600;}
+.sign-title{color:var(--ink-soft);font-size:10.5px;}
+
+.stamp{position:absolute;width:132px;height:132px;right:8px;bottom:38px;transform:rotate(-9deg);opacity:.88;mix-blend-mode:multiply;pointer-events:none;}
+
+.paper-footer{
+  position:absolute;bottom:8mm;left:14mm;right:14mm;text-align:center;
+  font-size:9.5px;color:var(--sage);font-family:'IBM Plex Sans',sans-serif;letter-spacing:.03em;
+  border-top:1px solid var(--rule);padding-top:8px;
+}
+
+/* Minimal theme override */
+.paper.theme-minimal{font-family:'IBM Plex Sans',sans-serif;}
+.paper.theme-minimal .doc-title,.paper.theme-minimal .issuer-name,.paper.theme-minimal .bill-name,.paper.theme-minimal .total-line.grand,.paper.theme-minimal .sign-script{font-family:'IBM Plex Sans',sans-serif;}
+.paper.theme-minimal .doc-title{font-style:normal;font-weight:600;color:var(--ink);}
+.paper.theme-minimal table.items thead th{background:transparent;color:var(--ink);border-bottom:2px solid var(--ink);}
+.paper.theme-minimal .doc-head{border-bottom:1px solid var(--ink);}
+
+@media print{
+  body{background:#fff;}
+  .topbar,.form-panel,.preview-hint{display:none !important;}
+  .workspace{grid-template-columns:1fr;}
+  .preview-panel{padding:0;height:auto;}
+  .paper{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">Encre<span>.</span></div>
+    <div class="brand-tag">Atelier de facturation</div>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn btn-ghost" id="btnPrint">Imprimer</button>
+    <button class="btn btn-brass" id="btnPdf">Télécharger le PDF</button>
+  </div>
+</div>
+
+<div class="workspace">
+
+  <!-- ============ FORM PANEL ============ -->
+  <div class="form-panel" id="formPanel">
+
+    <div class="step">
+      <div class="step-head"><div class="step-num">1</div><div class="step-title">Émetteur</div></div>
+      <div class="step-body">
+        <div class="logo-upload">
+          <div class="logo-preview" id="logoPreview"><span style="font-size:9px;color:#999;">Logo</span></div>
+          <button class="btn btn-small file-btn">Importer<input type="file" id="logoInput" accept="image/*"></button>
+        </div>
+        <div class="field"><label>Nom de l'entreprise</label><input id="cName" value="Toonation Ventures" placeholder="Nom de votre entreprise"></div>
+        <div class="row row-2 field">
+          <div><label>Ville</label><input id="cCity" value="Kaolack, Sénégal"></div>
+          <div><label>Téléphone</label><input id="cPhone" value="+221 77 000 00 00"></div>
+        </div>
+        <div class="field"><label>Adresse</label><input id="cAddress" value="Route de Ndorong, Kaolack"></div>
+        <div class="row row-2 field">
+          <div><label>Email</label><input id="cEmail" value="contact@toonation.sn"></div>
+          <div><label>NINEA</label><input id="cNinea" value="00987654 2A2"></div>
+        </div>
+        <div class="field"><label>RCCM</label><input id="cRccm" value="SN.KLK.2024.A.112"></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><div class="step-num">2</div><div class="step-title">Client</div></div>
+      <div class="step-body">
+        <div class="field"><label>Nom du client</label><input id="clName" value="Coopérative Saloum CajouTech" placeholder="Nom du client"></div>
+        <div class="field"><label>Adresse</label><input id="clAddress" value="Quartier Léona, Kaolack"></div>
+        <div class="row row-2 field">
+          <div><label>Email</label><input id="clEmail" value="direction@saloumcajoutech.sn"></div>
+          <div><label>Téléphone</label><input id="clPhone" value="+221 78 000 00 00"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><div class="step-num">3</div><div class="step-title">Détails de la facture</div></div>
+      <div class="step-body">
+        <div class="row row-2 field">
+          <div><label>N° de facture</label><input id="iNumber" value="FA-2026-0001"></div>
+          <div><label>Devise</label>
+            <select id="iCurrency">
+              <option value="XOF" selected>FCFA (XOF)</option>
+              <option value="EUR">Euro (EUR)</option>
+              <option value="USD">Dollar (USD)</option>
+              <option value="MAD">Dirham (MAD)</option>
+            </select>
+          </div>
+        </div>
+        <div class="row row-2 field">
+          <div><label>Date d'émission</label><input type="date" id="iDate"></div>
+          <div><label>Échéance</label><input type="date" id="iDue"></div>
+        </div>
+        <div class="field"><label>Statut</label>
+          <select id="iStatus">
+            <option value="none">Aucun cachet</option>
+            <option value="paid">Payée</option>
+            <option value="due">En attente</option>
+            <option value="late">En retard</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><div class="step-num">4</div><div class="step-title">Articles &amp; prestations</div></div>
+      <div class="step-body">
+        <div class="items-head"><div>Désignation</div><div>Qté</div><div>P.U.</div><div>TVA%</div><div></div></div>
+        <div id="itemsWrap"></div>
+        <button class="btn btn-small" id="btnAddItem">+ Ajouter une ligne</button>
+        <div class="row row-2 field" style="margin-top:16px;">
+          <div><label>Remise</label><input type="number" id="iDiscountVal" value="0" min="0"></div>
+          <div><label>Type</label>
+            <select id="iDiscountType">
+              <option value="percent">% pourcentage</option>
+              <option value="amount">Montant fixe</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><div class="step-num">5</div><div class="step-title">Signature &amp; cachet</div></div>
+      <div class="step-body">
+        <div class="sig-tabs">
+          <div class="sig-tab active" data-sig="draw">Dessiner</div>
+          <div class="sig-tab" data-sig="upload">Importer une image</div>
+        </div>
+        <div id="sigDrawZone"><canvas id="sigCanvas"></canvas></div>
+        <div id="sigUploadZone" class="sig-upload-zone" style="display:none;">
+          <span id="sigUploadHint">Aucune image importée</span>
+          <img id="sigUploadImg" style="display:none;">
+        </div>
+        <div class="sig-actions">
+          <button class="btn btn-small" id="btnClearSig">Effacer</button>
+          <button class="btn btn-small file-btn">Importer<input type="file" id="sigInput" accept="image/*"></button>
+        </div>
+        <div class="row row-2 field" style="margin-top:14px;">
+          <div><label>Nom du signataire</label><input id="sigName" value="Mamadou Alioune Thiam"></div>
+          <div><label>Fonction</label><input id="sigTitle" value="Fondateur"></div>
+        </div>
+        <div class="field"><label>Lieu de signature</label><input id="sigCity" value="Kaolack"></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><div class="step-num">6</div><div class="step-title">Notes &amp; conditions</div></div>
+      <div class="step-body">
+        <div class="field"><label>Conditions de paiement</label><textarea id="iTerms">Paiement à réception, par virement bancaire ou Wave/Orange Money. Pénalité de retard : 1,5% par mois au-delà de l'échéance.</textarea></div>
+        <div class="field"><label>Notes</label><textarea id="iNotes">Merci pour votre confiance.</textarea></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><div class="step-num">7</div><div class="step-title">Thème</div></div>
+      <div class="step-body">
+        <div class="theme-row">
+          <div class="theme-swatch active" data-theme="ink">Encre &amp; brass</div>
+          <div class="theme-swatch" data-theme="minimal">Minimal</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ PREVIEW PANEL ============ -->
+  <div class="preview-panel">
+    <div class="preview-hint">Aperçu — identique au PDF généré</div>
+    <div class="paper theme-ink" id="invoicePaper"></div>
+  </div>
+
+</div>
+
+<script>
+// ---------------- STATE ----------------
+let items = [
+  {designation:"Développement plateforme web — Saloum CajouTech", qty:1, price:1800000, tax:18},
+  {designation:"Formation & accompagnement technique", qty:2, price:150000, tax:18},
+];
+let logoDataUrl = null;
+let signatureDataUrl = null;
+let sigMode = 'draw';
+
+const $ = id => document.getElementById(id);
+
+function todayISO(offsetDays=0){
+  const d = new Date(); d.setDate(d.getDate()+offsetDays);
+  return d.toISOString().slice(0,10);
+}
+$('iDate').value = todayISO(0);
+$('iDue').value = todayISO(15);
+
+// ---------------- ITEM ROWS ----------------
+function renderItemRows(){
+  const wrap = $('itemsWrap');
+  wrap.innerHTML = '';
+  items.forEach((it, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <input data-f="designation" data-i="${idx}" value="${escapeAttr(it.designation)}" placeholder="Désignation">
+      <input data-f="qty" data-i="${idx}" type="number" min="0" step="1" value="${it.qty}">
+      <input data-f="price" data-i="${idx}" type="number" min="0" value="${it.price}">
+      <input data-f="tax" data-i="${idx}" type="number" min="0" value="${it.tax}">
+      <button class="btn-remove" data-remove="${idx}">✕</button>`;
+    wrap.appendChild(row);
+  });
+}
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+function escapeHtml(s){ return String(s ?? '').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+$('itemsWrap').addEventListener('input', e=>{
+  const f = e.target.dataset.f, i = e.target.dataset.i;
+  if(f===undefined) return;
+  if(f==='designation') items[i].designation = e.target.value;
+  else items[i][f] = parseFloat(e.target.value)||0;
+  renderPreview();
+});
+$('itemsWrap').addEventListener('click', e=>{
+  const idx = e.target.dataset.remove;
+  if(idx!==undefined){ items.splice(idx,1); renderItemRows(); renderPreview(); }
+});
+$('btnAddItem').addEventListener('click', ()=>{
+  items.push({designation:'', qty:1, price:0, tax:18});
+  renderItemRows(); renderPreview();
+});
+
+// ---------------- LOGO ----------------
+$('logoInput').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    logoDataUrl = ev.target.result;
+    $('logoPreview').innerHTML = `<img src="${logoDataUrl}">`;
+    renderPreview();
+  };
+  reader.readAsDataURL(file);
+});
+
+// ---------------- SIGNATURE : DRAW ----------------
+const canvas = $('sigCanvas');
+let ctx, drawing=false, hasDrawn=false;
+function initCanvas(){
+  const ratio = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width*ratio; canvas.height = rect.height*ratio;
+  ctx = canvas.getContext('2d');
+  ctx.scale(ratio,ratio);
+  ctx.strokeStyle = '#16302B'; ctx.lineWidth = 2.4; ctx.lineCap='round'; ctx.lineJoin='round';
+}
+setTimeout(initCanvas, 50);
+let resizeTimer;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{
+    const keep = hasDrawn ? canvas.toDataURL() : null;
+    initCanvas();
+    if(keep){
+      const img = new Image();
+      img.onload = ()=>{ ctx.drawImage(img, 0, 0, canvas.width/(window.devicePixelRatio||1), canvas.height/(window.devicePixelRatio||1)); };
+      img.src = keep;
+    }
+  }, 200);
+});
+
+function getPos(e){
+  const rect = canvas.getBoundingClientRect();
+  return {x:(e.clientX-rect.left), y:(e.clientY-rect.top)};
+}
+canvas.addEventListener('pointerdown', e=>{
+  drawing = true; hasDrawn = true;
+  const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y);
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', e=>{
+  if(!drawing) return;
+  const p = getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke();
+});
+canvas.addEventListener('pointerup', ()=>{
+  drawing=false;
+  if(sigMode==='draw' && hasDrawn){ signatureDataUrl = canvas.toDataURL(); renderPreview(); }
+});
+
+$('btnClearSig').addEventListener('click', ()=>{
+  if(sigMode==='draw'){ ctx.clearRect(0,0,canvas.width,canvas.height); hasDrawn=false; }
+  else { $('sigUploadImg').style.display='none'; $('sigUploadHint').style.display='block'; }
+  signatureDataUrl = null;
+  renderPreview();
+});
+
+// signature upload
+$('sigInput').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    signatureDataUrl = ev.target.result;
+    document.querySelectorAll('.sig-tab').forEach(t=>t.classList.remove('active'));
+    document.querySelector('[data-sig="upload"]').classList.add('active');
+    $('sigDrawZone').style.display='none'; $('sigUploadZone').style.display='flex';
+    sigMode='upload';
+    $('sigUploadImg').src = signatureDataUrl; $('sigUploadImg').style.display='block';
+    $('sigUploadHint').style.display='none';
+    renderPreview();
+  };
+  reader.readAsDataURL(file);
+});
+
+document.querySelectorAll('.sig-tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.sig-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    sigMode = tab.dataset.sig;
+    if(sigMode==='draw'){ $('sigDrawZone').style.display='block'; $('sigUploadZone').style.display='none'; signatureDataUrl = hasDrawn?canvas.toDataURL():null; }
+    else{ $('sigDrawZone').style.display='none'; $('sigUploadZone').style.display='flex'; }
+    renderPreview();
+  });
+});
+
+// ---------------- THEME ----------------
+document.querySelectorAll('.theme-swatch').forEach(sw=>{
+  sw.addEventListener('click', ()=>{
+    document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.remove('active'));
+    sw.classList.add('active');
+    const paper = $('invoicePaper');
+    paper.classList.remove('theme-ink','theme-minimal');
+    paper.classList.add('theme-'+sw.dataset.theme);
+  });
+});
+
+// ---------------- STAMP SVG ----------------
+function stampSVG(status){
+  if(status==='none') return '';
+  const cfg = {
+    paid:{color:'#2E6B41', text:'PAYÉE', ring:'FACTURE ACQUITTÉE • MERCI'},
+    due:{color:'#7C5726', text:'EN ATTENTE', ring:'PAIEMENT ATTENDU • SVP RÉGLER'},
+    late:{color:'#A23B2E', text:'EN RETARD', ring:'ÉCHÉANCE DÉPASSÉE • RELANCE'}
+  }[status];
+  const id = 'stampPath'+status;
+  return `
+  <svg class="stamp" viewBox="0 0 100 100">
+    <defs><path id="${id}" d="M 8,50 A 42,42 0 1,1 92,50" fill="none"/></defs>
+    <circle cx="50" cy="50" r="46" fill="none" stroke="${cfg.color}" stroke-width="1.4"/>
+    <circle cx="50" cy="50" r="40" fill="none" stroke="${cfg.color}" stroke-width="0.6"/>
+    <text font-size="5.1" letter-spacing="1.2" fill="${cfg.color}" font-family="IBM Plex Sans, sans-serif" font-weight="600">
+      <textPath href="#${id}" startOffset="50%" text-anchor="middle">${cfg.ring}</textPath>
+    </text>
+    <text x="50" y="55" text-anchor="middle" font-size="13.5" font-family="Fraunces, serif" font-weight="600" fill="${cfg.color}">${cfg.text}</text>
+  </svg>`;
+}
+
+// ---------------- CURRENCY / MATH ----------------
+function fmt(n, currency){
+  try{
+    return new Intl.NumberFormat('fr-FR', {style:'currency', currency, maximumFractionDigits: currency==='XOF'?0:2}).format(n);
+  }catch(e){ return n.toFixed(2)+' '+currency; }
+}
+function computeTotals(currency){
+  let subtotal = 0, taxTotal = 0;
+  items.forEach(it=>{
+    const lineSub = (it.qty||0)*(it.price||0);
+    subtotal += lineSub;
+    taxTotal += lineSub * ((it.tax||0)/100);
+  });
+  const beforeDiscount = subtotal + taxTotal;
+  const dType = $('iDiscountType').value, dVal = parseFloat($('iDiscountVal').value)||0;
+  const discountAmount = dType==='percent' ? beforeDiscount*(dVal/100) : dVal;
+  const total = Math.max(0, beforeDiscount - discountAmount);
+  return {subtotal, taxTotal, discountAmount, total};
+}
+
+// ---------------- RENDER PREVIEW ----------------
+function renderPreview(){
+  const currency = $('iCurrency').value;
+  const t = computeTotals(currency);
+  const cName = $('cName').value || 'Votre entreprise';
+  const initials = cName.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+
+  const rows = items.map(it=>{
+    const lineTotal = (it.qty||0)*(it.price||0)*(1+(it.tax||0)/100);
+    return `<tr>
+      <td><div class="cell-desc-title">${escapeHtml(it.designation||'—')}</div></td>
+      <td class="cell-num">${it.qty}</td>
+      <td class="cell-num">${fmt(it.price||0, currency)}</td>
+      <td class="cell-num">${it.tax||0}%</td>
+      <td class="cell-num">${fmt(lineTotal, currency)}</td>
+    </tr>`;
+  }).join('');
+
+  const logoHtml = logoDataUrl ? `<img src="${logoDataUrl}">` : initials;
+  const sigHtml = signatureDataUrl
+    ? `<img class="sign-img" src="${signatureDataUrl}">`
+    : `<div class="sign-script" style="opacity:.15;">Signature</div>`;
+
+  const statusVal = $('iStatus').value;
+
+  $('invoicePaper').innerHTML = `
+    <div class="paper-inner">
+      ${stampSVG(statusVal)}
+      <div class="doc-head">
+        <div class="issuer">
+          <div class="issuer-logo">${logoHtml}</div>
+          <div>
+            <div class="issuer-name">${escapeHtml(cName)}</div>
+            <div class="issuer-line">${escapeHtml($('cAddress').value)}<br>${escapeHtml($('cCity').value)}<br>${escapeHtml($('cEmail').value)} · ${escapeHtml($('cPhone').value)}</div>
+          </div>
+        </div>
+        <div class="doc-meta">
+          <div class="doc-title">Facture</div>
+          <div class="doc-num">N° ${escapeHtml($('iNumber').value)}</div>
+          <div class="doc-dates">
+            Émise le <b>${frDate($('iDate').value)}</b><br>
+            Échéance <b>${frDate($('iDue').value)}</b>
+          </div>
+        </div>
+      </div>
+
+      <div class="bill-to">
+        <div class="bill-block">
+          <div class="bill-eyebrow">Facturé à</div>
+          <div class="bill-name">${escapeHtml($('clName').value)}</div>
+          <div class="bill-line">${escapeHtml($('clAddress').value)}<br>${escapeHtml($('clEmail').value)}<br>${escapeHtml($('clPhone').value)}</div>
+        </div>
+        <div class="bill-block" style="text-align:right;">
+          <div class="bill-eyebrow">Identification</div>
+          <div class="bill-line">NINEA ${escapeHtml($('cNinea').value)}<br>RCCM ${escapeHtml($('cRccm').value)}</div>
+        </div>
+      </div>
+
+      <table class="items">
+        <thead><tr><th>Désignation</th><th>Qté</th><th>Prix unit.</th><th>TVA</th><th>Montant</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div class="totals-wrap">
+        <div class="totals">
+          <div class="total-line"><span>Sous-total HT</span><b>${fmt(t.subtotal, currency)}</b></div>
+          <div class="total-line"><span>TVA</span><b>${fmt(t.taxTotal, currency)}</b></div>
+          ${t.discountAmount>0 ? `<div class="total-line"><span>Remise</span><b>− ${fmt(t.discountAmount, currency)}</b></div>` : ''}
+          <div class="total-line grand"><span>Total TTC</span><b>${fmt(t.total, currency)}</b></div>
+        </div>
+      </div>
+
+      <div class="notes-block">
+        <div class="eyebrow">Conditions de paiement</div>
+        ${escapeHtml($('iTerms').value)}
+      </div>
+      ${$('iNotes').value ? `<div class="notes-block"><div class="eyebrow">Notes</div>${escapeHtml($('iNotes').value)}</div>` : ''}
+
+      <div class="sign-zone">
+        <div class="sign-locdate">Fait à ${escapeHtml($('sigCity').value)}, le ${frDate(todayISO(0))}</div>
+        <div class="sign-block">
+          ${sigHtml}
+          <div class="sign-rule">
+            <div class="sign-name">${escapeHtml($('sigName').value)}</div>
+            <div class="sign-title">${escapeHtml($('sigTitle').value)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="paper-footer">${escapeHtml(cName)} — Document généré via Encre, atelier de facturation</div>
+    </div>
+  `;
+}
+function frDate(iso){
+  if(!iso) return '—';
+  const d = new Date(iso+'T00:00:00');
+  return d.toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
+}
+
+// re-render on any form input
+$('formPanel').addEventListener('input', renderPreview);
+$('formPanel').addEventListener('change', renderPreview);
+
+// ---------------- PDF EXPORT ----------------
+function waitForLibs(timeoutMs){
+  return new Promise(resolve=>{
+    const start = Date.now();
+    (function check(){
+      if(window.html2canvas && window.jspdf){ resolve(true); return; }
+      if(Date.now()-start > timeoutMs){ resolve(false); return; }
+      setTimeout(check, 150);
+    })();
+  });
+}
+
+async function generatePdf(){
+  const btn = $('btnPdf'); const original = btn.textContent;
+  btn.textContent = 'Chargement…'; btn.style.opacity='.6';
+
+  const ready = await waitForLibs(8000);
+  if(!ready){
+    btn.textContent = original; btn.style.opacity='1';
+    const wantsPrint = confirm("Le module PDF n'a pas pu se charger (connexion internet requise pour la première génération). Utiliser l'impression du navigateur à la place (Enregistrer en PDF) ?");
+    if(wantsPrint) window.print();
+    return;
+  }
+
+  btn.textContent = 'Génération…';
+  const node = $('invoicePaper');
+  try{
+    const canvasImg = await html2canvas(node, {scale:3, useCORS:true, backgroundColor:'#FBF8EF'});
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    const pageW = 210, pageH = 297;
+    const imgW = pageW;
+    const imgH = canvasImg.height * imgW / canvasImg.width;
+
+    if(imgH <= pageH){
+      pdf.addImage(canvasImg.toDataURL('image/jpeg',0.97), 'JPEG', 0, 0, imgW, imgH);
+    } else {
+      // slice into multiple pages
+      const pageCanvasHeightPx = canvasImg.width * (pageH/imgW) ; // px height per page
+      let renderedHeight = 0;
+      let first = true;
+      while(renderedHeight < canvasImg.height){
+        const sliceH = Math.min(pageCanvasHeightPx, canvasImg.height - renderedHeight);
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = canvasImg.width; sliceCanvas.height = sliceH;
+        const sctx = sliceCanvas.getContext('2d');
+        sctx.drawImage(canvasImg, 0, renderedHeight, canvasImg.width, sliceH, 0, 0, canvasImg.width, sliceH);
+        const sliceImgH = sliceH * imgW / canvasImg.width;
+        if(!first) pdf.addPage();
+        pdf.addImage(sliceCanvas.toDataURL('image/jpeg',0.97), 'JPEG', 0, 0, imgW, sliceImgH);
+        renderedHeight += sliceH; first = false;
+      }
+    }
+    const filename = `Facture_${$('iNumber').value || 'export'}.pdf`;
+    pdf.save(filename);
+  } catch(err){
+    console.error(err);
+    alert("Une erreur est survenue lors de la génération du PDF.");
+  } finally {
+    btn.textContent = original; btn.style.opacity='1';
+  }
+}
+$('btnPdf').addEventListener('click', generatePdf);
+$('btnPrint').addEventListener('click', ()=>window.print());
+
+// ---------------- INIT ----------------
+renderItemRows();
+renderPreview();
+</script>
+</body>
+</html>
